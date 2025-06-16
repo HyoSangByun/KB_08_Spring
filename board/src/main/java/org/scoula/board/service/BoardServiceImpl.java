@@ -71,6 +71,7 @@ public class BoardServiceImpl implements BoardService {
     @Override
     @Transactional
     public boolean delete(Long no) {
+//        기존 삭제방식인데 이는 첨부파일 삭제가 안되어 게시글 삭제시 오류 발생
 //        log.info("delete...." + no);
 //        return mapper.delete(no) == 1;
 
