@@ -3,50 +3,144 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
+<!-- namespace는 Mapper 인터페이스의 전체 경로와 일치해야 함 -->
 <mapper namespace="org.scoula.board.mapper.BoardMapper">
 
-    <select id="getList" resultType="org.scoula.board.domain.BoardVO">
-        <!--
-            <![CDATA[  ]]>: 이미 컴파일되었다는 뜻
-            <나 > 같은 특수 기호를 있는 그대로 데이터로 인식
-        -->
+    <!-- 게시글 목록 조회 -->
+    <!-- BoardVO 별칭 사용-->
+    <select id="getList"  resultType="BoardVO">
         <![CDATA[
-            select * from tbl_board
-            order by no desc
+        select * from tbl_board
+        order by no desc
         ]]>
     </select>
 
-    <select id="get" resultType="org.scoula.board.domain.BoardVO">
-        select * from tbl_board where no = #{no}
+
+    <!-- *** get 수정 *** -->
+    <!--
+        1. 게시글과 첨부파일을 조인하여 조회
+        2. 조회된 결과를 "boardMap" ResultMap을 이용해 Java 객체에 매핑
+    -->
+    <select id="get" resultMap="boardMap">
+        SELECT b.*,
+               a.no as ano, a.bno, a.filename, a.path,
+               a.content_type, a.size, a.reg_date as a_reg_date
+        FROM tbl_board b
+                 LEFT OUTER JOIN tbl_board_attachment a ON b.no = a.bno
+        WHERE b.no = #{no}
+        ORDER BY filename
     </select>
 
+
+
+    <!--  Create(등록) 기능 구현 -->
     <insert id="create">
         insert into tbl_board (title, content, writer)
         values (#{title}, #{content}, #{writer})
 
         <!--
-            🔽 MyBatis의 <selectKey> 태그 설명 🔽
-
-            - INSERT 구문 안에서 자동 증가된 기본키(PK)를 바로 조회할 때 사용
-            - 예: MySQL의 AUTO_INCREMENT 컬럼에서 마지막으로 생성된 ID를 가져오는 용도
-        -->
-        <selectKey
-                resultType="Long" keyProperty="no" keyColumn="no" order="AFTER">            <!-- MySQL에서 가장 최근 INSERT된 AUTO_INCREMENT 값 가져오기 -->
-
+             생성된 PK 값을 BoardVO 객체의 no 필드에 설정
+              - LAST_INSERT_ID(): MySQL의 마지막 삽입 ID 조회 함수
+           -->
+        <selectKey resultType="Long" keyProperty="no" keyColumn="no" order="AFTER">
             SELECT LAST_INSERT_ID()
         </selectKey>
+
     </insert>
 
+
+    <!-- 게시글 수정 처리 -->
     <update id="update">
         update tbl_board set
-                             title = #{title},
-                             content = #{content},
-                             writer = #{writer},
-                             update_date = now()
+        title = #{title},
+        content = #{content},
+        writer = #{writer},
+        update_date = now()    <!-- 수정 시간 자동 업데이트 -->
         where no = #{no}
     </update>
 
+
+    <!-- 게시글 삭제 처리 -->
     <delete id="delete">
         delete from tbl_board where no = #{no}
     </delete>
+
+
+    <!-- 첨부파일 등록 -->
+    <insert id="createAttachment">
+        INSERT INTO tbl_board_attachment(filename, path, content_type, size, bno)
+        VALUES(#{filename}, #{path}, #{contentType}, #{size}, #{bno})
+    </insert>
+
+    <!-- 게시글의 첨부파일 목록 조회 -->
+    <select id="getAttachmentList" resultType="org.scoula.board.domain.BoardAttachmentVO">
+        SELECT * FROM tbl_board_attachment
+        WHERE bno = #{bno}
+        ORDER BY filename
+    </select>
+
+    <!-- 특정 첨부파일 조회 -->
+    <select id="getAttachment" resultType="org.scoula.board.domain.BoardAttachmentVO">
+        SELECT * FROM tbl_board_attachment
+        WHERE no = #{no}
+    </select>
+
+    <!-- 첨부파일 삭제 -->
+    <delete id="deleteAttachment">
+        DELETE FROM tbl_board_attachment
+        WHERE bno = #{bno}
+    </delete>
+
+
+    <!-- *** ResultMap을 이용한 조인 처리 *** -->
+    <!-- 첨부파일 ResultMap 정의 -->
+    <!--
+        * 조회된 컬럼명과 Java 프로퍼티명이 다른 경우 매핑 작업 필수 *
+        <id column="ano" property="no"/>
+          <result column="a_reg_date" property="regDate"/>
+    -->
+    <resultMap id="attachmentMap" type="org.scoula.board.domain.BoardAttachmentVO">
+        <id column="ano" property="no"/>
+        <result column="bno" property="bno"/>
+        <result column="filename" property="filename"/>
+        <result column="path" property="path"/>
+        <result column="contentType" property="contentType"/>
+        <result column="size" property="size"/>
+        <result column="a_reg_date" property="regDate"/>
+    </resultMap>
+
+    <!-- 게시글 + 첨부파일 통합 ResultMap -->
+    <!--
+        <collection>을 통해 하나의 게시글에 여러 첨부파일이 연결되는 1:N 관계를 처리
+     -->
+    <resultMap id="boardMap" type="org.scoula.board.domain.BoardVO">
+        <id column="no" property="no"/>
+        <result column="title" property="title"/>
+        <result column="content" property="content"/>
+        <result column="writer" property="writer"/>
+        <result column="reg_date" property="regDate"/>
+        <result column="update_date" property="updateDate"/>
+
+        <!-- 첨부파일 컬렉션 매핑 -->
+        <collection property="attaches" resultMap="attachmentMap"/>
+    </resultMap>
+
+    <!--
+        [결과 처리 과정]
+
+        1. id="get" SQL 실행으로 조인된 조회 결과 반환
+        2. 조회된 결과를 <resultMap id="boardMap> 을 이용해 Java 객체에 매핑
+        3. "boardMap"이 각 행의 게시글 부분 컬럼을 `BoardVO` 객체로 변환
+        4. 첨부파일 부분 컬럼은
+          <collection property="attaches" resultMap="attachmentMap">을 통해
+          BoardAttachmentVO 객체로 변환
+        5. 변환된 BoardAttachmentVO는 BoardVO.attaches 필드에 자동 추가(add)
+        6. 최종 완성된 BoardVO 객체 반환
+    -->
+
+
+
+
+
+
 </mapper>
