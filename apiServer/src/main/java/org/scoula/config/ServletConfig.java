@@ -20,8 +20,7 @@ import org.springframework.web.servlet.view.JstlView;
 @ComponentScan(basePackages = {
         "org.scoula.exception",    // 📍 예외 처리 패키지 추가, 우선 스캔되도록 앞에 작성
         "org.scoula.controller",
-        "org.scoula.board.controller",   // BoardController 패키지 추가
-        "org.scoula.weather.controller"
+        "org.scoula.board.controller"    // BoardController 패키지 추가
 }) // Spring MVC용 컴포넌트 등록을 위한 스캔 패키지
 public class ServletConfig implements WebMvcConfigurer {
 
